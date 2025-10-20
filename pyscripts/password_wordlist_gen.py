@@ -82,6 +82,7 @@ cat best64_password.list | awk 'length($0) >= 12' > best64_password_12.list
 cat best64_password.list | awk 'length($0) >= 13' > best64_password_13.list
 cat rockyou-30000_password.list | awk 'length($0) >= 12' > rockyou-30000_password_12.list
 cat rockyou-30000_password.list | awk 'length($0) >= 12' > rockyou-30000_password_13.list
+
 """
     )
     
