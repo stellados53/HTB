@@ -52,15 +52,15 @@ def main():
         epilog="""
 Examples:
   # Generate combinations from 1 to 4 words and save to output.txt
-  python password_wordlist_gen.py -i wordlist.txt -o output.txt
+  python password_wordlist_gen.py -i suspected_wordlist.txt -o password-wordlist-raw.txt
   
   # Generate combinations from 2 to 3 words only
-  python password_wordlist_gen.py -i wordlist.txt -o output.txt --min 2 --max 3
+  python password_wordlist_gen.py -i suspected_wordlist.txt -o password-wordlist-raw.txt --min 2 --max 3
   
   # Generate combinations with custom separator
-  python .py -i wordlist.txt -o output.txt --separator "-"
+  python.py -i suspected_wordlist.txt -o password-wordlist-raw.txt --separator "-"
   
-Input file format (wordlist.txt):
+Input file format (suspected_wordlist.txt):
   mark
   white
   05
@@ -68,8 +68,20 @@ Input file format (wordlist.txt):
   1998
   sanfransico
   baseball
+   # Output file will contain all possible combinations from 1 to 4 words by default.
 
-Output file will contain all possible combinations from 1 to 4 words by default.
+Post Wordlist Generation
+ls -l /usr/share/hashcat/rules
+
+# changing the passwords chars 
+hashcat --force -r /usr/share/hashcat/rules/best64.rule password.list --stdout | sort -u > best64_password.list
+hashcat --force -r /usr/share/hashcat/rules/rockyou-30000.rule password.list --stdout | sort -u > rockyou-30000_password.list
+
+# extracting certain length from a wordlist
+cat best64_password.list | awk 'length($0) >= 12' > best64_password_12.list
+cat best64_password.list | awk 'length($0) >= 13' > best64_password_13.list
+cat rockyou-30000_password.list | awk 'length($0) >= 12' > rockyou-30000_password_12.list
+cat rockyou-30000_password.list | awk 'length($0) >= 12' > rockyou-30000_password_13.list
 """
     )
     
