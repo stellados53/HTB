@@ -71,17 +71,17 @@ Input file format (suspected_wordlist.txt):
    # Output file will contain all possible combinations from 1 to 4 words by default.
 
 Post Wordlist Generation
- ls -l /usr/share/hashcat/rules
+  ls -l /usr/share/hashcat/rules
 
 # changing the passwords chars 
- hashcat --force -r /usr/share/hashcat/rules/best64.rule password.list --stdout | sort -u > best64_password.list
- hashcat --force -r /usr/share/hashcat/rules/rockyou-30000.rule password.list --stdout | sort -u > rockyou-30000_password.list
+  hashcat --force -r /usr/share/hashcat/rules/best64.rule password.list --stdout | sort -u > best64_password.list
+  hashcat --force -r /usr/share/hashcat/rules/rockyou-30000.rule password.list --stdout | sort -u > rockyou-30000_password.list
 
 # extracting certain length from a wordlist
- cat best64_password.list | awk 'length($0) >= 12' > best64_password_12.list
- cat best64_password.list | awk 'length($0) >= 13' > best64_password_13.list
- cat rockyou-30000_password.list | awk 'length($0) >= 12' > rockyou-30000_password_12.list
- cat rockyou-30000_password.list | awk 'length($0) >= 12' > rockyou-30000_password_13.list
+  cat best64_password.list | awk 'length($0) >= 12' > best64_password_12.list
+  cat best64_password.list | awk 'length($0) >= 13' > best64_password_13.list
+  cat rockyou-30000_password.list | awk 'length($0) >= 12' > rockyou-30000_password_12.list
+  cat rockyou-30000_password.list | awk 'length($0) >= 12' > rockyou-30000_password_13.list
 
 """
     )
