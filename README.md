@@ -10,6 +10,5 @@
 ```
 wget https://github.com/urbanadventurer/username-anarchy/archive/refs/tags/v0.6.zip
 unzip v0.6.zip
-mv username-anarchy-0.6/username-anarchy .
-./username-anarchy -i names.txt > usernames.txt
+./username-anarchy-0.6/username-anarchy -i names.txt > usernames.txt
 ```
