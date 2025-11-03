@@ -4,6 +4,8 @@ import platform
 import threading
 from concurrent.futures import ThreadPoolExecutor
 import time
+import sys
+import select
 
 def ping_host(ip, timeout=1):
     """
@@ -36,21 +38,47 @@ def scan_subnet(subnet, max_threads=50):
     """
     try:
         network = ipaddress.ip_network(subnet, strict=False)
+        all_ips = list(network.hosts())
+        total_ips = len(all_ips)
+        
         print(f"Scanning subnet: {subnet}")
-        print(f"Total IPs to scan: {network.num_addresses}")
+        print(f"Total IPs to scan: {total_ips}")
+        print("Press Enter to see progress...")
         print("-" * 50)
         
         active_hosts = []
-        total_scanned = 0
+        completed_ips = 0
+        lock = threading.Lock()
+        
+        # Function to update progress and check for user input
+        def update_progress():
+            nonlocal completed_ips
+            with lock:
+                completed_ips += 1
+                
+            # Check if user pressed Enter
+            if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+                line = sys.stdin.readline()
+                if line:  # Enter was pressed
+                    with lock:
+                        progress = (completed_ips / total_ips) * 100
+                        remaining_ips = total_ips - completed_ips
+                        print(f"\nProgress: {progress:.1f}% ({completed_ips}/{total_ips} completed, {remaining_ips} remaining)")
+                        print("Press Enter again for updated progress...")
+        
+        # Worker function that wraps ping_host
+        def worker(ip):
+            is_up, ip_addr = ping_host(ip)
+            update_progress()  # Update progress after each ping
+            return is_up, ip_addr
         
         # Use thread pool for concurrent scanning
         with ThreadPoolExecutor(max_workers=max_threads) as executor:
             # Submit all ping tasks
-            future_to_ip = {executor.submit(ping_host, str(ip)): ip for ip in network.hosts()}
+            future_to_ip = {executor.submit(worker, str(ip)): ip for ip in all_ips}
             
             # Process results as they complete
             for future in future_to_ip:
-                total_scanned += 1
                 is_up, ip = future.result()
                 if is_up:
                     active_hosts.append(ip)
