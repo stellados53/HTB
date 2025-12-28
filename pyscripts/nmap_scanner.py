@@ -6,17 +6,13 @@ import os
 import re
 import argparse
 from pathlib import Path
-import shutil
+import ipaddress
 
 def run_command(cmd):
     """Execute a shell command and return the output"""
     try:
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-        if result.returncode != 0:
-            print(f"Error running command: {cmd}")
-            print(f"Error: {result.stderr}")
-            return None
-        return result.stdout
+        return result
     except Exception as e:
         print(f"Exception running command {cmd}: {e}")
         return None
@@ -34,11 +30,50 @@ def extract_open_ports(nmap_output):
     
     return open_ports
 
+def extract_live_hosts(nmap_output):
+    """Extract live hosts from nmap ping scan output"""
+    live_hosts = []
+    lines = nmap_output.split('\n')
+    
+    for line in lines:
+        # Match lines like "Nmap scan report for 10.10.10.10"
+        if "Nmap scan report for" in line:
+            # Extract IP address
+            match = re.search(r'(\d+\.\d+\.\d+\.\d+)', line)
+            if match:
+                live_hosts.append(match.group(1))
+    
+    return live_hosts
+
 def create_output_directory(dir_name="nmap_scans"):
     """Create output directory if it doesn't exist"""
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
     return dir_name
+
+def perform_host_discovery(target):
+    """Perform host discovery to find live hosts"""
+    print(f"\n[+] Performing host discovery for: {target}")
+    
+    # Use nmap -sn for ping scan (no port scan)
+    discovery_cmd = f"nmap -sn {target}"
+    print(f"Command: {discovery_cmd}")
+    
+    result = run_command(discovery_cmd)
+    if result is None or result.returncode != 0:
+        print(f"[-] Host discovery failed for {target}")
+        return []
+    
+    live_hosts = extract_live_hosts(result.stdout)
+    
+    if live_hosts:
+        print(f"[+] Found {len(live_hosts)} live host(s):")
+        for host in live_hosts:
+            print(f"    - {host}")
+    else:
+        print(f"[-] No live hosts found for {target}")
+    
+    return live_hosts
 
 def scan_single_ip(ip, output_dir=None):
     """Perform complete nmap scan for a single IP"""
@@ -46,22 +81,41 @@ def scan_single_ip(ip, output_dir=None):
     print(f"Scanning target: {ip}")
     print(f"{'='*60}")
     
+    # Step 0: Check if host is alive (quick ping check)
+    print(f"[+] Checking if host is alive...")
+    ping_cmd = f"ping -c 2 -W 2 {ip} > /dev/null 2>&1 && echo 'alive' || echo 'dead'"
+    ping_result = run_command(ping_cmd)
+    
+    if ping_result and 'alive' not in ping_result.stdout:
+        print(f"[-] Host {ip} appears to be down. Skipping detailed scan.")
+        print(f"[-] You can force scan with --no-ping-check option")
+        
+        # Still create a minimal report file if output_dir is specified
+        if output_dir:
+            output_path = os.path.join(output_dir, f"{ip}.nmap")
+            with open(output_path, 'w') as f:
+                f.write(f"Host {ip} appears to be down (no response to ping)\n")
+                f.write(f"Scan skipped at {run_command('date').stdout.strip()}\n")
+        
+        return False
+    
     # Step 1: Port discovery scan
     print(f"\n[+] Initiating port discovery scan for {ip}")
     port_scan_cmd = f"sudo nmap -p- --min-rate=10000 {ip}"
     print(f"Command: {port_scan_cmd}")
     
-    port_scan_output = run_command(port_scan_cmd)
-    if port_scan_output is None:
+    result = run_command(port_scan_cmd)
+    if result is None or result.returncode != 0:
         print(f"[-] Failed to run port discovery scan for {ip}")
         return False
+    
+    port_scan_output = result.stdout
     
     # Extract open ports
     open_ports = extract_open_ports(port_scan_output)
     
     if not open_ports:
         print(f"[-] No open ports found for {ip}")
-        # Still save the scan results even if no ports are open
         ports_string = ""
     else:
         ports_string = ','.join(open_ports)
@@ -76,10 +130,12 @@ def scan_single_ip(ip, output_dir=None):
     
     print(f"Command: {script_scan_cmd}")
     
-    script_scan_output = run_command(script_scan_cmd)
-    if script_scan_output is None:
+    result = run_command(script_scan_cmd)
+    if result is None or result.returncode != 0:
         print(f"[-] Failed to run script scan for {ip}")
         return False
+    
+    script_scan_output = result.stdout
     
     # Combine both outputs
     combined_output = f"{'='*60}\n"
@@ -120,94 +176,77 @@ def scan_single_ip(ip, output_dir=None):
     
     return True
 
-def scan_multiple_targets(targets):
-    """Scan multiple targets (IPs, ranges, or from file)"""
+def scan_multiple_targets(targets, no_ping_check=False):
+    """Scan multiple targets with host discovery first"""
     # Create output directory
     output_dir = create_output_directory()
     print(f"\n[+] Created output directory: {output_dir}")
-    print(f"[+] Scanning {len(targets)} target(s)...")
+    
+    all_live_hosts = []
+    
+    # First, discover live hosts from all targets
+    for target in targets:
+        if no_ping_check:
+            # If no ping check, treat all targets as live
+            print(f"[!] Skipping host discovery for {target} (--no-ping-check)")
+            # For ranges/CIDR, we need to expand them
+            if '/' in target or '-' in target:
+                # Use nmap to list hosts without scanning
+                list_cmd = f"nmap -sL {target} | grep 'Nmap scan report' | cut -d' ' -f5"
+                result = run_command(list_cmd)
+                if result and result.stdout:
+                    expanded_hosts = [ip.strip() for ip in result.stdout.split('\n') if ip.strip()]
+                    all_live_hosts.extend(expanded_hosts)
+                    print(f"[+] Expanded {target} to {len(expanded_hosts)} hosts")
+            else:
+                all_live_hosts.append(target)
+        else:
+            live_hosts = perform_host_discovery(target)
+            all_live_hosts.extend(live_hosts)
+    
+    # Remove duplicates
+    all_live_hosts = list(set(all_live_hosts))
+    
+    if not all_live_hosts:
+        print(f"\n[-] No live hosts found. Exiting.")
+        return False
+    
+    print(f"\n[+] Found {len(all_live_hosts)} unique live host(s) to scan")
+    print(f"[+] Starting detailed scans...")
     
     successful_scans = 0
-    for target in targets:
-        # For targets that might be ranges (like 10.10.10.10-20),
-        # we need to expand them first. However, nmap handles ranges natively.
-        # We'll pass the target directly and let nmap handle it.
+    for host in all_live_hosts:
         print(f"\n{'#'*60}")
-        print(f"Processing target: {target}")
+        print(f"Scanning live host: {host}")
         print(f"{'#'*60}")
         
-        if scan_target(target, output_dir):
+        if scan_single_ip(host, output_dir):
             successful_scans += 1
     
     print(f"\n{'='*60}")
     print(f"SCAN COMPLETE")
     print(f"{'='*60}")
-    print(f"Successfully scanned: {successful_scans}/{len(targets)} targets")
+    print(f"Successfully scanned: {successful_scans}/{len(all_live_hosts)} live hosts")
     print(f"Output directory: {output_dir}")
+    
+    # Create a summary file
+    summary_path = os.path.join(output_dir, "scan_summary.txt")
+    with open(summary_path, 'w') as f:
+        f.write(f"Nmap Scan Summary\n")
+        f.write(f"=================\n\n")
+        f.write(f"Total targets provided: {len(targets)}\n")
+        f.write(f"Live hosts found: {len(all_live_hosts)}\n")
+        f.write(f"Successfully scanned: {successful_scans}\n")
+        f.write(f"Scan date: {run_command('date').stdout.strip()}\n\n")
+        f.write("Live hosts scanned:\n")
+        for host in sorted(all_live_hosts):
+            f.write(f"  - {host}\n")
+    
+    print(f"[+] Summary saved to: {summary_path}")
     
     return successful_scans > 0
 
-def scan_target(target, output_dir):
-    """Scan a single target (could be IP, hostname, or range)"""
-    print(f"\n[+] Scanning target: {target}")
-    
-    # Step 1: Port discovery scan
-    print(f"[+] Initiating port discovery scan...")
-    port_scan_cmd = f"sudo nmap -p- --min-rate=10000 {target}"
-    port_scan_output = run_command(port_scan_cmd)
-    
-    if port_scan_output is None:
-        print(f"[-] Failed to run port discovery scan for {target}")
-        return False
-    
-    # Extract open ports from the output
-    open_ports = extract_open_ports(port_scan_output)
-    
-    if open_ports:
-        ports_string = ','.join(open_ports)
-        print(f"[+] Found {len(open_ports)} open port(s)")
-    else:
-        ports_string = ""
-        print(f"[!] No open ports found")
-    
-    # Step 2: Script and version scan
-    print(f"[+] Initiating script and version scan...")
-    if ports_string:
-        script_scan_cmd = f"sudo nmap -sC -sV -O {target} -p {ports_string}"
-    else:
-        script_scan_cmd = f"sudo nmap -sC -sV -O {target}"
-    
-    script_scan_output = run_command(script_scan_cmd)
-    if script_scan_output is None:
-        print(f"[-] Failed to run script scan for {target}")
-        return False
-    
-    # Combine outputs
-    combined_output = f"{'='*60}\n"
-    combined_output += f"COMPLETE NMAP SCAN REPORT FOR: {target}\n"
-    combined_output += f"{'='*60}\n\n"
-    
-    combined_output += "PORT DISCOVERY SCAN RESULTS:\n"
-    combined_output += "-" * 40 + "\n"
-    combined_output += port_scan_output
-    combined_output += "\n\n"
-    
-    combined_output += "SCRIPT AND VERSION SCAN RESULTS:\n"
-    combined_output += "-" * 40 + "\n"
-    combined_output += script_scan_output
-    
-    # Save output with sanitized filename
-    # Replace characters that might cause issues in filenames
-    safe_filename = re.sub(r'[^\w\.\-]', '_', target)
-    output_path = os.path.join(output_dir, f"{safe_filename}.nmap")
-    
-    with open(output_path, 'w') as f:
-        f.write(combined_output)
-    
-    print(f"[✓] Scan saved to: {output_path}")
-    return True
-
-def scan_from_file(filename):
+def scan_from_file(filename, no_ping_check=False):
     """Scan targets from a file"""
     try:
         with open(filename, 'r') as f:
@@ -223,7 +262,7 @@ def scan_from_file(filename):
             return False
         
         print(f"[+] Loaded {len(targets)} target(s) from {filename}")
-        return scan_multiple_targets(targets)
+        return scan_multiple_targets(targets, no_ping_check)
         
     except FileNotFoundError:
         print(f"[-] File {filename} not found")
@@ -234,25 +273,40 @@ def scan_from_file(filename):
 
 def validate_target(target):
     """Validate if target looks like a valid nmap target"""
-    # Basic validation for IP, hostname, or range
-    # This is permissive to allow nmap to handle validation
-    ip_pattern = re.compile(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(?:/\d{1,2}|-\d{1,3})?$')
-    hostname_pattern = re.compile(r'^[a-zA-Z0-9\.\-]+$')
-    
-    if ip_pattern.match(target) or hostname_pattern.match(target):
-        return True
-    
     # Check for CIDR notation
     if '/' in target:
         parts = target.split('/')
-        if len(parts) == 2 and ip_pattern.match(parts[0]):
+        if len(parts) == 2:
             try:
-                mask = int(parts[1])
-                return 0 <= mask <= 32
+                # Try to parse as IP network
+                ipaddress.ip_network(target, strict=False)
+                return True
             except ValueError:
                 return False
     
-    return False
+    # Check for IP range (e.g., 10.10.10.10-20)
+    if '-' in target and not target.startswith('-'):
+        # Remove any whitespace
+        target = target.replace(' ', '')
+        range_parts = target.split('-')
+        if len(range_parts) == 2:
+            base_ip = range_parts[0]
+            # Check if base IP is valid
+            try:
+                ipaddress.ip_address(base_ip)
+                return True
+            except ValueError:
+                return False
+    
+    # Check for single IP or hostname
+    try:
+        # Try as IP address
+        ipaddress.ip_address(target)
+        return True
+    except ValueError:
+        # Try as hostname (basic check)
+        hostname_pattern = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9\.\-]*[a-zA-Z0-9]$')
+        return hostname_pattern.match(target) is not None
 
 def show_manual():
     """Display the manual/help page"""
@@ -261,11 +315,13 @@ NMAP SCANNER - Automated Nmap Scanning Tool
 ============================================
 
 DESCRIPTION:
-This script automates the two-phase Nmap scanning process:
-1. First, it performs a comprehensive port discovery scan
-2. Then, it runs detailed script and version scans on discovered ports
+This script automates the two-phase Nmap scanning process with host discovery:
+1. First, performs host discovery to find live hosts
+2. Then, performs comprehensive port discovery scan on live hosts
+3. Finally, runs detailed script and version scans on discovered ports
 
 FEATURES:
+- Host discovery before scanning (saves time on dead hosts)
 - Automatic port discovery using aggressive timing
 - Script scanning (-sC) and version detection (-sV)
 - OS detection (-O)
@@ -283,45 +339,40 @@ TARGET FORMATS:
     Hostname:           python3 nmap_scanner.py example.com
 
 OPTIONS:
-    -h, --help      Show this help message and exit
-    --version       Show version information
+    -h, --help          Show this help message and exit
+    --version           Show version information
+    --no-ping-check     Skip host discovery and scan all targets
 
 EXAMPLES:
-    1. Scan single target (saved as 192.168.1.100.nmap):
+    1. Scan single target with host check:
        python3 nmap_scanner.py 192.168.1.100
 
-    2. Scan multiple targets (saved in nmap_scans/ directory):
-       python3 nmap_scanner.py 192.168.1.100 192.168.1.101
+    2. Scan CIDR range with host discovery:
+       python3 nmap_scanner.py 10.10.10.0/24
 
-    3. Scan IP range (saved in nmap_scans/ directory):
-       python3 nmap_scanner.py 10.10.10.10-20
+    3. Scan IP range without host discovery:
+       python3 nmap_scanner.py 10.10.10.10-20 --no-ping-check
 
-    4. Scan targets from file (saved in nmap_scans/ directory):
+    4. Scan targets from file:
        python3 nmap_scanner.py target_list.txt
-
-    5. Show this help:
-       python3 nmap_scanner.py
 
 OUTPUT:
     Single target:      <IP>.nmap in current directory
     Multiple targets:   All files in nmap_scans/ directory
+                        + scan_summary.txt with results
 
-REQUIREMENTS:
-    - Nmap must be installed and accessible in PATH
-    - Script requires sudo privileges for certain Nmap options
-    - Python 3.6 or higher
-
-NOTES:
-    - The script uses aggressive timing (--min-rate=10000) for faster scans
-    - OS detection requires root privileges
+HOST DISCOVERY:
+    By default, the script performs host discovery first using nmap -sn.
+    This prevents wasting time scanning dead hosts.
+    Use --no-ping-check to disable this behavior.
     """
     print(manual)
 
 def show_version():
     """Display version information"""
     version_info = """
-Nmap Scanner v2.0
-Automated Two-Phase Nmap Scanning Tool
+Nmap Scanner v2.1
+Automated Nmap Scanning Tool with Host Discovery
 Created for comprehensive network reconnaissance
 """
     print(version_info)
@@ -331,6 +382,7 @@ def main():
     parser.add_argument('targets', nargs='*', help='Target(s) to scan (IPs, ranges, hostnames, or file)')
     parser.add_argument('-h', '--help', action='store_true', help='Show help message')
     parser.add_argument('--version', action='store_true', help='Show version information')
+    parser.add_argument('--no-ping-check', action='store_true', help='Skip host discovery and scan all targets')
     
     args, unknown = parser.parse_known_args()
     
@@ -353,19 +405,23 @@ def main():
     if len(all_targets) == 1:
         # Check if it's a file
         if os.path.isfile(all_targets[0]):
-            # Scan from file (multiple targets)
-            scan_from_file(all_targets[0])
+            # Scan from file
+            scan_from_file(all_targets[0], args.no_ping_check)
         else:
             # Single target scan
             target = all_targets[0]
             if validate_target(target):
-                scan_single_ip(target)
+                if not args.no_ping_check:
+                    # Still do a quick ping check for single IP
+                    scan_single_ip(target)
+                else:
+                    # Skip ping check
+                    scan_single_ip(target)
             else:
                 print(f"[-] Invalid target format: {target}")
                 print("[!] Valid formats: IP, IP range, CIDR, or hostname")
     else:
         # Multiple targets
-        # Validate all targets
         valid_targets = []
         for target in all_targets:
             if validate_target(target):
@@ -374,7 +430,7 @@ def main():
                 print(f"[-] Invalid target format: {target}")
         
         if valid_targets:
-            scan_multiple_targets(valid_targets)
+            scan_multiple_targets(valid_targets, args.no_ping_check)
         else:
             print("[-] No valid targets specified")
             show_manual()
