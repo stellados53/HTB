@@ -78,7 +78,7 @@ def discover_live_hosts(targets, output_dir):
     base_output = os.path.join(output_dir, "host_discovery")
     
     # Run nmap host discovery with real-time output
-    cmd = f"nmap -sn -iL {targets_file} -oN {base_output}"
+    cmd = f"nmap -sn -iL {targets_file} -oA {base_output}"
     success = run_command_real_time(cmd)
     
     if not success:
