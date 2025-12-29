@@ -362,7 +362,7 @@ Examples:
     live_hosts = []
     live_hosts_file = None
     
-    if args.skip_discovery:
+    if args.no_ping:
         print(f"\n\033[93m[!] Skipping host discovery phase\033[0m")
         # Treat all targets as live hosts
         live_hosts = targets
