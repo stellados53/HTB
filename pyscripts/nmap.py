@@ -78,7 +78,7 @@ def discover_live_hosts(targets, output_dir):
     base_output = os.path.join(output_dir, "host_discovery")
     
     # Run nmap host discovery with real-time output
-    cmd = f"nmap -sn -iL {targets_file} -oA {base_output}"
+    cmd = f"nmap -sn -iL {targets_file} -oN {base_output}"
     success = run_command_real_time(cmd)
     
     if not success:
@@ -168,7 +168,7 @@ def scan_live_hosts(live_hosts_file, output_dir):
         
         # Phase 1: Full port scan
         print(f"\n\033[94m[ Phase 1: Full port discovery ]\033[0m")
-        phase1_output = os.path.join(host_dir, "full_port_scan")
+        phase1_output = os.path.join(host_dir, "port_scan")
         cmd = f"sudo nmap -p- --min-rate=10000 {host} -oA {phase1_output}"
         if not run_command_real_time(cmd):
             continue
