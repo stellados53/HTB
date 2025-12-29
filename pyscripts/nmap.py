@@ -168,7 +168,7 @@ def scan_live_hosts(live_hosts_file, output_dir):
         
         # Phase 1: Full port scan
         print(f"\n\033[94m[ Phase 1: Full port discovery ]\033[0m")
-        phase1_output = os.path.join(host_dir, "port_scan")
+        phase1_output = os.path.join(host_dir, "full_port_scan")
         cmd = f"sudo nmap -p- --min-rate=10000 {host} -oA {phase1_output}"
         if not run_command_real_time(cmd):
             continue
@@ -317,7 +317,7 @@ Examples:
     parser.add_argument('targets', nargs='*', help='Target(s) to scan')
     parser.add_argument('-iL', '--input-file', help='Input file containing targets')
     parser.add_argument('--no-ping', action='store_true', 
-                       help='Skip host discovery ping scan phase')
+                       help='Skip host ping scan phase')
     parser.add_argument('--no-sudo', action='store_true',
                        help='Run without sudo (some features disabled)')
     
