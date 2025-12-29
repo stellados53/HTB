@@ -148,11 +148,11 @@ def main():
     print("SCAN COMPLETE")
     print(f"{'='*60}\033[0m")
     
+    print(f"\n\033[92m[+] Total hosts scanned: {len(live_hosts)}\033[0m")
     print(f"\033[92m[+] All results saved in: {scan_dir}/\033[0m")
     
-    print(f"\n\033[92m[+] Total hosts scanned: {len(live_hosts)}\033[0m")
     print(f"\033[92m[+] Use individual XML files for EyeWitness if needed\033[0m")
-    print(f"\033[92m[+] Example: eyewitness -x {detailed_dir}/10.129.174.177/script_scan.xml\033[0m")
+    print(f"\033[92m[+] Example: eyewitness --web -x {detailed_dir}/10.129.174.177/script_scan.xml\033[0m")
 
 if __name__ == "__main__":
     # Check if nmap is installed
