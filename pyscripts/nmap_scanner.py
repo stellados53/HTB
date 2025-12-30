@@ -26,7 +26,16 @@ def run_cmd(cmd, show_cmd=True):
     return process.wait() == 0
 
 def main():
-    parser = argparse.ArgumentParser(description='Simple Nmap Scanner')
+    print("""  _   _                          _____                                 
+ | \\ | |                        / ____|                                
+ |  \\| |_ __ ___   __ _ _ __   | (___   ___ __ _ _ __  _ __   ___ _ __ 
+ | . ` | '_ ` _ \\ / _` | '_ \\   \\___ \\ / __/ _` | '_ \\| '_ \\ / _ \\ '__|
+ | |\\  | | | | | | (_| | |_) |  ____) | (_| (_| | | | | | | |  __/ |   
+ |_| \\_|_| |_| |_|\\__,_| .__/  |_____/ \\___\\__,_|_| |_|_| |_|\\___|_|   
+                       | |                                             
+                       |_|                                             
+                                                                        \n""")
+    parser = argparse.ArgumentParser(description='Version - 2.2.0')
     parser.add_argument('targets', nargs='*', help='Targets to scan (IPs, ranges, CIDR)')
     parser.add_argument('-iL', '--input-file', help='File with targets')
     parser.add_argument('--no-ping', action='store_true', help='Skip host discovery')
