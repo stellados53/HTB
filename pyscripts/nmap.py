@@ -105,8 +105,8 @@ def main():
     print(f"{'='*60}\033[0m")
     
     # Create detailed scans directory
-    detailed_dir = os.path.join(scan_dir, "detailed_scans")
-    os.makedirs(detailed_dir, exist_ok=True)
+    # detailed_dir = os.path.join(scan_dir, "detailed_scans")
+    # os.makedirs(detailed_dir, exist_ok=True)
     
     # Scan each live host
     for i, host in enumerate(live_hosts, 1):
@@ -114,7 +114,7 @@ def main():
         print(f"{'-'*50}\033[0m")
         
         # Create host directory
-        host_dir = os.path.join(detailed_dir, host)
+        host_dir = os.path.join(scan_dir, host)
         os.makedirs(host_dir, exist_ok=True)
         
         # Phase 1: Full port scan
@@ -152,7 +152,7 @@ def main():
     print(f"\033[92m[+] All results saved in: {scan_dir}/\033[0m")
     
     print(f"\033[92m[+] Use individual XML files for EyeWitness if needed\033[0m")
-    print(f"\033[92m[+] Example: eyewitness --web -x {detailed_dir}/10.129.174.177/script_scan.xml\033[0m")
+    print(f"\033[92m[+] Example: eyewitness --web -x {scan_dir}/10.129.174.177/script_scan.xml\033[0m")
 
 if __name__ == "__main__":
     # Check if nmap is installed
