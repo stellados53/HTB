@@ -146,7 +146,7 @@ def main():
         # Phase 2: Script and version scan
         print(f"\033[94m[2] Running script & version scan...\033[0m")
         script_scan_base = os.path.join(host_dir, "script_scan")
-        cmd = f"sudo nmap -sC -sV -O -p {ports} {host} -oA {script_scan_base}"
+        cmd = f"sudo nmap -sC -sV -O -Pn -p {ports} {host} -oA {script_scan_base}"
         run_cmd(cmd)
         
         print(f"\033[92m[✓] Completed scan for {host}\033[0m")
